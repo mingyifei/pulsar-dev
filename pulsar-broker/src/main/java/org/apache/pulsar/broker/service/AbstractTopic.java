@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import lombok.Getter;
 import org.apache.bookkeeper.mledger.util.StatsBuckets;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.pulsar.broker.ServiceConfiguration;
@@ -47,6 +48,7 @@ import org.apache.pulsar.broker.service.schema.BookkeeperSchemaStorage;
 import org.apache.pulsar.broker.service.schema.SchemaRegistryService;
 import org.apache.pulsar.broker.service.schema.exceptions.IncompatibleSchemaException;
 import org.apache.pulsar.broker.stats.prometheus.metrics.Summary;
+import org.apache.pulsar.broker.systopic.SystemTopicClient;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.InactiveTopicDeleteMode;
 import org.apache.pulsar.common.policies.data.InactiveTopicPolicies;
@@ -92,6 +94,8 @@ public abstract class AbstractTopic implements Topic {
 
     // Whether messages published must be encrypted or not in this topic
     protected volatile boolean isEncryptionRequired = false;
+
+    @Getter
     protected volatile SchemaCompatibilityStrategy schemaCompatibilityStrategy =
             SchemaCompatibilityStrategy.FULL;
     protected volatile boolean isAllowAutoUpdateSchema = true;
@@ -524,10 +528,17 @@ public abstract class AbstractTopic implements Topic {
         PUBLISH_LATENCY.observe(latency, unit);
     }
 
-    protected void setSchemaCompatibilityStrategy (Policies policies) {
-        if (policies.schema_compatibility_strategy == SchemaCompatibilityStrategy.UNDEFINED) {
-            schemaCompatibilityStrategy = SchemaCompatibilityStrategy.fromAutoUpdatePolicy(
-                    policies.schema_auto_update_compatibility_strategy);
+    protected void setSchemaCompatibilityStrategy(Policies policies) {
+        if (SystemTopicClient.isSystemTopic(TopicName.get(this.topic))) {
+            schemaCompatibilityStrategy =
+                    brokerService.pulsar().getConfig().getSystemTopicSchemaCompatibilityStrategy();
+        } else if (policies.schema_compatibility_strategy == SchemaCompatibilityStrategy.UNDEFINED) {
+            schemaCompatibilityStrategy = brokerService.pulsar()
+                    .getConfig().getSchemaCompatibilityStrategy();
+            if (schemaCompatibilityStrategy == SchemaCompatibilityStrategy.UNDEFINED) {
+                schemaCompatibilityStrategy = SchemaCompatibilityStrategy.fromAutoUpdatePolicy(
+                        policies.schema_auto_update_compatibility_strategy);
+            }
         } else {
             schemaCompatibilityStrategy = policies.schema_compatibility_strategy;
         }

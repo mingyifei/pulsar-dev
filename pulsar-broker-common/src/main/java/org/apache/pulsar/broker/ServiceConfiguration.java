@@ -40,6 +40,7 @@ import org.apache.pulsar.common.nar.NarClassLoader;
 import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.policies.data.InactiveTopicDeleteMode;
 import org.apache.pulsar.common.policies.data.OffloadedReadPriority;
+import org.apache.pulsar.common.policies.data.SchemaCompatibilityStrategy;
 import org.apache.pulsar.common.policies.data.TopicType;
 import org.apache.pulsar.common.protocol.Commands;
 import org.apache.pulsar.common.sasl.SaslConstants;
@@ -541,6 +542,18 @@ public class ServiceConfiguration implements PulsarConfiguration {
     private int maxTopicsPerNamespace = 0;
 
     @FieldContext(
+        category = CATEGORY_POLICIES,
+        doc = "The maximum number of connections in the broker. If it exceeds, new connections are rejected."
+    )
+    private int brokerMaxConnections = 0;
+
+    @FieldContext(
+        category = CATEGORY_POLICIES,
+        doc = "The maximum number of connections per IP. If it exceeds, new connections are rejected."
+    )
+    private int brokerMaxConnectionsPerIp = 0;
+
+    @FieldContext(
         category = CATEGORY_SERVER,
         dynamic = true,
         doc = "Enable check for minimum allowed client library version"
@@ -996,6 +1009,13 @@ public class ServiceConfiguration implements PulsarConfiguration {
             category = CATEGORY_SERVER,
             doc = "Enable or disable system topic.")
     private boolean systemTopicEnabled = false;
+
+    @FieldContext(
+            category = CATEGORY_SCHEMA,
+            doc = "The schema compatibility strategy to use for system topics"
+    )
+    private SchemaCompatibilityStrategy systemTopicSchemaCompatibilityStrategy =
+            SchemaCompatibilityStrategy.ALWAYS_COMPATIBLE;
 
     @FieldContext(
         category = CATEGORY_SERVER,
@@ -1924,11 +1944,13 @@ public class ServiceConfiguration implements PulsarConfiguration {
             + "   if you enable this setting, it will cause non-java clients failed to produce."
     )
     private boolean isSchemaValidationEnforced = false;
+
     @FieldContext(
         category = CATEGORY_SCHEMA,
         doc = "The schema storage implementation used by this broker"
     )
     private String schemaRegistryStorageClassName = "org.apache.pulsar.broker.service.schema.BookkeeperSchemaStorageFactory";
+
     @FieldContext(
         category = CATEGORY_SCHEMA,
         doc = "The list compatibility checkers to be used in schema registry"
@@ -1938,6 +1960,13 @@ public class ServiceConfiguration implements PulsarConfiguration {
             "org.apache.pulsar.broker.service.schema.AvroSchemaCompatibilityCheck",
             "org.apache.pulsar.broker.service.schema.ProtobufNativeSchemaCompatibilityCheck"
     );
+
+    @FieldContext(
+            category = CATEGORY_SCHEMA,
+            doc = "The schema compatibility strategy in broker level. If this config in namespace policy is `UNDEFINED`"
+                    + ", schema compatibility strategy check will use it in broker level."
+    )
+    private SchemaCompatibilityStrategy schemaCompatibilityStrategy = SchemaCompatibilityStrategy.UNDEFINED;
 
     /**** --- WebSocket --- ****/
     @FieldContext(

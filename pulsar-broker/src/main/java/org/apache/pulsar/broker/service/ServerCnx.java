@@ -191,6 +191,7 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
     private FeatureFlags features;
 
     private PulsarCommandSender commandSender;
+    private final ConnectionController connectionController;
 
     private static final KeySharedMeta emptyKeySharedMeta = new KeySharedMeta()
             .setKeySharedMode(KeySharedMode.AUTO_SPLIT);
@@ -245,11 +246,21 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
         this.maxPendingBytesPerThread = conf.getMaxMessagePublishBufferSizeInMB() * 1024L * 1024L
                 / conf.getNumIOThreads();
         this.resumeThresholdPendingBytesPerThread = this.maxPendingBytesPerThread / 2;
+        this.connectionController = new ConnectionController.DefaultConnectionController(conf);
     }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
+        ConnectionController.Sate sate = connectionController.increaseConnection(remoteAddress);
+        if (!sate.equals(ConnectionController.Sate.OK)) {
+            ctx.channel().writeAndFlush(Commands.newError(-1, ServerError.NotAllowedError,
+                    sate.equals(ConnectionController.Sate.REACH_MAX_CONNECTION)
+                            ? "Reached the maximum number of connections"
+                            : "Reached the maximum number of connections on address" + remoteAddress));
+            ctx.channel().close();
+            return;
+        }
         log.info("New connection from {}", remoteAddress);
         this.ctx = ctx;
         this.commandSender = new PulsarCommandSenderImpl(getBrokerService().getInterceptor(), this);
@@ -260,6 +271,7 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
+        connectionController.decreaseConnection(ctx.channel().remoteAddress());
         isActive = false;
         log.info("Closed connection from {}", remoteAddress);
         BrokerInterceptor brokerInterceptor = getBrokerService().getInterceptor();
@@ -1558,9 +1570,8 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
 
         CompletableFuture<Producer> producerFuture = producers.get(producerId);
         if (producerFuture == null) {
-            log.warn("[{}] Producer was not registered on the connection. producerId={}", remoteAddress, producerId);
-            commandSender.sendErrorResponse(requestId, ServerError.UnknownError,
-                    "Producer was not registered on the connection");
+            log.info("[{}] Producer {} was not registered on the connection", remoteAddress, producerId);
+            ctx.writeAndFlush(Commands.newSuccess(requestId));
             return;
         }
 
@@ -1605,8 +1616,8 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
 
         CompletableFuture<Consumer> consumerFuture = consumers.get(consumerId);
         if (consumerFuture == null) {
-            log.warn("[{}] Consumer was not registered on the connection: consumerId={}", remoteAddress, consumerId);
-            commandSender.sendErrorResponse(requestId, ServerError.MetadataError, "Consumer not found");
+            log.info("[{}] Consumer was not registered on the connection: {}", consumerId, remoteAddress);
+            ctx.writeAndFlush(Commands.newSuccess(requestId));
             return;
         }
 
