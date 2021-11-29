@@ -79,7 +79,7 @@ flexible messaging model and an intuitive client API.</description>
   <properties>
     <maven.compiler.source>8</maven.compiler.source>
     <maven.compiler.target>8</maven.compiler.target>
-
+    <pulsar.basedir>/Users/developer/Documents/personal/pulsar</pulsar.basedir>
     <!--config keys to congiure test selection -->
     <include>**/Test*.java,**/*Test.java,**/*Tests.java,**/*TestCase.java</include>
     <exclude/>
